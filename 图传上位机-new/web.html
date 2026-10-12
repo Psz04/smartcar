@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>智能车调试控制台</title>
+<style>
+:root {
+    --bg: #1e1e2e;
+    --panel: #313244;
+    --panel-2: #45475a;
+    --text: #cdd6f4;
+    --muted: #a6adc8;
+    --green: #a6e3a1;
+    --red: #f38ba8;
+    --yellow: #f9e2af;
+    --blue: #89b4fa;
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    padding: 16px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Microsoft YaHei", "Noto Sans SC", Arial, sans-serif;
+}
+.container { max-width: 1200px; margin: 0 auto; }
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+.header h1 { font-size: 22px; margin: 0; }
+.status { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.status-dot {
+    width: 12px; height: 12px; border-radius: 50%; background: var(--red);
+}
+.status-dot.connected { background: var(--green); }
+.status-dot.connecting { background: var(--yellow); }
+.main-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 14px;
+}
+.panel {
+    background: var(--panel);
+    border-radius: 10px;
+    padding: 14px;
+}
+.panel h2, .panel h3 { margin-top: 0; font-size: 16px; color: var(--blue); }
+.video-box {
+    min-height: 360px;
+    aspect-ratio: 160 / 97;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--panel-2);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.video-box img {
+    display: none;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    image-rendering: pixelated;
+}
+.video-box p { color: var(--muted); }
+.side-col { display: flex; flex-direction: column; gap: 14px; }
+textarea, input[type="number"], input[type="text"] {
+    width: 100%;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid #585b70;
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 14px;
+}
+textarea { resize: vertical; min-height: 64px; }
+button {
+    border: 0;
+    border-radius: 6px;
+    padding: 9px 12px;
+    font-size: 14px;
+    cursor: pointer;
+    color: #1e1e2e;
+    font-weight: 600;
+}
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-send { background: var(--green); width: 100%; margin-top: 8px; }
+.button-row { display: flex; gap: 8px; margin-top: 8px; }
+.btn-start { background: var(--green); flex: 1; }
+.btn-stop { background: var(--red); flex: 1; }
+.row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+.row label { width: 90px; color: var(--muted); font-size: 13px; }
+.info-line { display: flex; justify-content: space-between; margin: 5px 0; font-size: 13px; }
+.info-line span:last-child { color: var(--text); }
+.log {
+    margin-top: 14px;
+    height: 180px;
+    overflow-y: auto;
+    background: #181825;
+    border-radius: 8px;
+    padding: 8px;
+    font-family: Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+}
+.log-entry { border-bottom: 1px solid #313244; padding: 2px 0; }
+.timestamp { color: var(--muted); }
+.hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+@media (max-width: 820px) {
+    .main-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>智能车校内赛调试控制台</h1>
+        <div class="status">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="connectionStatus">未连接</span>
+        </div>
+    </div>
+
+    <div class="main-grid">
+        <div class="panel">
+            <h2>图像 / 图传</h2>
+            <div class="video-box" id="videoBox">
+                <p id="videoPlaceholder">等待图传数据...</p>
+                <img id="image" alt="vehicle image">
+            </div>
+            <div class="info-line"><span>实际图传帧率</span><span id="actualFps">0 fps</span></div>
+            <div class="info-line"><span>当前图片序号</span><span id="currentIndex">0</span></div>
+            <div class="row">
+                <label for="storageToggle">图像存储</label>
+                <input type="checkbox" id="storageToggle">
+            </div>
+            <div class="info-line"><span>存储状态</span><span id="storageStatus">关闭</span></div>
+        </div>
+
+        <div class="side-col">
+            <div class="panel">
+                <h2>发送指令</h2>
+                <textarea id="commandInput" placeholder="指令, 参数1, 参数2, ... 如 SERVO_PID, 120, 0, 60"></textarea>
+                <div class="button-row">
+                    <button class="btn-start" id="startBtn">START 发车</button>
+                    <button class="btn-stop" id="stopBtn">STOP 停车</button>
+                </div>
+                <button class="btn-send" id="sendCommandBtn">发送指令</button>
+                <div class="hint" id="lastCommand">等待发送</div>
+            </div>
+
+            <div class="panel">
+                <h3>状态信息</h3>
+                <div class="info-line"><span>WS 连接</span><span id="wsStatus">未连接</span></div>
+                <div class="info-line"><span>心跳</span><span id="heartbeatStatus">未连接</span></div>
+                <div class="info-line"><span>最后接收</span><span id="lastReceived">--:--:--</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel log" id="statusLog"></div>
+</div>
+
+<script>
+    let ws = null;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+    let heartbeatTimer = null;
+    let lastHeartbeatTimestamp = null;
+    let imageCount = 0;
+    let lastImageTime = Date.now();
+    let imageStorageEnabled = false;
+
+    const statusDot = document.getElementById('statusDot');
+    const connectionStatus = document.getElementById('connectionStatus');
+    const videoPlaceholder = document.getElementById('videoPlaceholder');
+    const imageElement = document.getElementById('image');
+    const actualFps = document.getElementById('actualFps');
+    const currentIndex = document.getElementById('currentIndex');
+    const commandInput = document.getElementById('commandInput');
+    const lastCommand = document.getElementById('lastCommand');
+    const statusLog = document.getElementById('statusLog');
+    const wsStatus = document.getElementById('wsStatus');
+    const heartbeatStatus = document.getElementById('heartbeatStatus');
+    const lastReceived = document.getElementById('lastReceived');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const storageToggle = document.getElementById('storageToggle');
+    const storageStatus = document.getElementById('storageStatus');
+
+    function setConnectionStatus(status, text) {
+        statusDot.className = 'status-dot ' + status;
+        connectionStatus.textContent = text;
+        wsStatus.textContent = text;
+    }
+
+    function addLog(message) {
+        const now = new Date().toLocaleTimeString();
+        const entry = document.createElement('div');
+        entry.className = 'log-entry';
+        entry.innerHTML = `<span class="timestamp">[${now}]</span> ${message}`;
+        statusLog.appendChild(entry);
+        statusLog.scrollTop = statusLog.scrollHeight;
+        lastReceived.textContent = now;
+    }
+
+    function initWebSocket() {
+        const host = location.hostname || 'localhost';
+        ws = new WebSocket(`ws://${host}:3001`);
+        setConnectionStatus('connecting', '连接中...');
+
+        ws.onopen = () => {
+            reconnectAttempts = 0;
+            setConnectionStatus('connected', '已连接');
+            addLog('WebSocket 已连接');
+            startHeartbeat();
+        };
+
+        ws.onmessage = (event) => {
+            let data = null;
+            try {
+                data = JSON.parse(event.data);
+            } catch (error) {
+                addLog('无法解析服务器消息');
+                return;
+            }
+
+            if (data.type === 'new_image') {
+                if (data.image) {
+                    const bytes = new Uint8Array(data.image.data);
+                    const blob = new Blob([bytes], { type: 'image/jpeg' });
+                    imageElement.src = URL.createObjectURL(blob);
+                    imageElement.style.display = 'block';
+                    videoPlaceholder.style.display = 'none';
+                }
+                if (data.idx !== -1 && data.idx !== undefined) {
+                    currentIndex.textContent = data.idx;
+                }
+                imageCount++;
+            } else if (data.type === 'command_ack') {
+                addLog(`指令已发送: ${data.data}`);
+                lastCommand.textContent = `已发送: ${data.data}`;
+            } else if (data.type === 'vehicle_message') {
+                addLog(`车端: ${data.message}`);
+            } else if (data.type === 'status_info') {
+                addLog(`状态: ${data.message}`);
+            } else if (data.type === 'heartbeat_response') {
+                lastHeartbeatTimestamp = data.timestamp;
+                if (data.status === true) {
+                    heartbeatStatus.textContent = '已连接';
+                    heartbeatStatus.style.color = '#a6e3a1';
+                } else {
+                    heartbeatStatus.textContent = '车端未连接';
+                    heartbeatStatus.style.color = '#f38ba8';
+                }
+            } else if (data.type === 'image_storage_state') {
+                imageStorageEnabled = (data.enabled === true);
+                storageToggle.checked = imageStorageEnabled;
+                storageStatus.textContent = imageStorageEnabled ? '开启' : '关闭';
+            }
+        };
+
+        ws.onclose = () => {
+            setConnectionStatus('', '已断开');
+            heartbeatStatus.textContent = '未连接';
+            heartbeatStatus.style.color = '#cdd6f4';
+            stopHeartbeat();
+            if (reconnectAttempts < maxReconnectAttempts) {
+                reconnectAttempts++;
+                addLog(`尝试重连 (${reconnectAttempts}/${maxReconnectAttempts})...`);
+                setTimeout(initWebSocket, 2000);
+            }
+        };
+
+        ws.onerror = () => {
+            setConnectionStatus('', '连接错误');
+            addLog('WebSocket 连接错误');
+        };
+    }
+
+    function startHeartbeat() {
+        stopHeartbeat();
+        heartbeatTimer = setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const timestamp = Date.now();
+                ws.send(JSON.stringify({ type: 'heartbeat', timestamp }));
+                lastHeartbeatTimestamp = timestamp;
+            }
+        }, 1000);
+    }
+
+    function stopHeartbeat() {
+        if (heartbeatTimer) {
+            clearInterval(heartbeatTimer);
+            heartbeatTimer = null;
+        }
+    }
+
+    function sendCommand(command) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            addLog('WebSocket 未连接，无法发送指令');
+            return false;
+        }
+        const text = String(command || '').trim();
+        if (!text) {
+            addLog('指令为空');
+            return false;
+        }
+        ws.send(JSON.stringify({ type: 'command', data: text }));
+        lastCommand.textContent = `已发送: ${text}`;
+        addLog(`发送指令: ${text}`);
+        return true;
+    }
+
+    document.getElementById('sendCommandBtn').addEventListener('click', () => {
+        sendCommand(commandInput.value);
+    });
+
+    commandInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+            event.preventDefault();
+            sendCommand(commandInput.value);
+        }
+    });
+
+    startBtn.addEventListener('click', () => {
+        sendCommand('START');
+    });
+
+    stopBtn.addEventListener('click', () => {
+        sendCommand('STOP');
+    });
+
+    storageToggle.addEventListener('change', () => {
+        const enabled = storageToggle.checked;
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            storageToggle.checked = !enabled;
+            addLog('WebSocket 未连接，无法设置图像存储');
+            return;
+        }
+        imageStorageEnabled = (enabled === true);
+        storageStatus.textContent = enabled ? '开启' : '关闭';
+        ws.send(JSON.stringify({ type: 'set_image_storage', enabled }));
+        addLog(`图像存储: ${enabled ? '开启' : '关闭'}`);
+    });
+
+
+
+    setInterval(() => {
+        const now = Date.now();
+        const elapsed = (now - lastImageTime) / 1000;
+        if (elapsed >= 1) {
+            actualFps.textContent = `${Math.round(imageCount / elapsed)} fps`;
+            imageCount = 0;
+            lastImageTime = now;
+        }
+    }, 1000);
+
+    initWebSocket();
+</script>
+</body>
+</html>

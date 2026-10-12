@@ -1,0 +1,3 @@
+type: IMAGE
+mid: 76
+fps: 10

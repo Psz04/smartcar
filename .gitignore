@@ -1,0 +1,57 @@
+# ---------- 第三方大库（自行下载，勿入库） ----------
+boost/
+boost.zip
+
+# ---------- 编译产物 ----------
+build/
+build_stale_20260928/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# ---------- 依赖目录 ----------
+node_modules/
+
+# ---------- 中间产物与运行结果（可重新生成） ----------
+vidframes/
+output/
+output_new/
+output_old_submission/
+refmatch/
+
+# ---------- 媒体文件 ----------
+*.mp4
+
+# ---------- 图传帧缓存（可再生） ----------
+图传上位机-new/image/
+
+# ---------- 系统与编辑器缓存 ----------
+snap/
+.cache/
+.config/
+.local/
+.vscode/
+.vscode-shared/
+.copilot/
+.mozilla/
+.npm/
+.nvm/
+.dotnet/
+.pki/
+.gnupg/
+.Xauthority
+.bash_history
+.viminfo
+.sudo_as_admin_successful
+*.sqlite
+*.swp
+.DS_Store
+
+# ---------- 私钥与凭证（切勿上传） ----------
+.ssh/
+*.pem
+id_rsa*
+id_ed25519*
+.env

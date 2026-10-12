@@ -1,0 +1,5 @@
+
+# nvm config
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # This loads nvm
+export NVM_NODEJS_ORG_MIRROR=https://npmmirror.com/mirrors/node
